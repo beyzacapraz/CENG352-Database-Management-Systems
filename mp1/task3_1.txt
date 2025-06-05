@@ -1,0 +1,43 @@
+SELECT tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+ORDER BY tablename;
+
+ALTER TABLE city DROP CONSTRAINT IF EXISTS city_pkey CASCADE;
+ALTER TABLE country DROP CONSTRAINT IF EXISTS country_pkey CASCADE;
+ALTER TABLE economy DROP CONSTRAINT IF EXISTS economy_pkey CASCADE;
+
+1. CREATE INDEX statements:
+
+CREATE INDEX city_country_code_hash_index ON city USING HASH (country_code);
+CREATE INDEX economy_country_code_hash_index ON economy USING HASH (country_code);
+
+EXPLAIN SELECT c.name, ct.name, c.population, e.gdp, e.inflation
+FROM city c
+NATURAL JOIN country ct
+NATURAL JOIN economy e;
+
+DROP INDEX city_country_code_hash_index;
+DROP INDEX economy_country_code_hash_index;
+
+2. Explanation for why I chose each of the indexes:
+
+I chose HASH indexes on the join columns because:
+a) The query performs NATURAL JOINs which match on country_code using equality comparisons.
+b) Hash indexes provide faster lookups for exact matches compared to B-tree indexes.
+c) Since we're not doing range queries or sorting on these columns, hash indexes are more efficient.
+
+3. The output of EXPLAIN for the query after the indexes were added:
+
+Nested Loop  (cost=9.15..98.13 rows=1 width=43)
+  ->  Hash Join  (cost=9.15..98.10 rows=1 width=30)
+        Hash Cond: (((c.name)::text = (ct.name)::text) AND (c.population = (ct.population)::double precision))
+        ->  Seq Scan on city c  (cost=0.00..59.10 rows=3410 width=20)
+        ->  Hash  (cost=5.46..5.46 rows=246 width=14)
+              ->  Seq Scan on country ct  (cost=0.00..5.46 rows=246 width=14)
+  ->  Index Scan using economy_country_code_hash_index on economy e  (cost=0.00..0.03 rows=1 width=19)
+        Index Cond: ((country_code)::text = (c.country_code)::text)
+
+4. Whether the indexes caused a performance increase for the query:
+
+Yes, there was a speed up. The query execution plan shows the use of the economy_country_code_hash_index for efficient lookups when joining the economy table, which improves performance compared to a sequential scan on economy.

@@ -1,0 +1,53 @@
+SELECT tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+ORDER BY tablename;
+
+ALTER TABLE city DROP CONSTRAINT IF EXISTS city_pkey CASCADE;
+ALTER TABLE country DROP CONSTRAINT IF EXISTS country_pkey CASCADE;
+ALTER TABLE economy DROP CONSTRAINT IF EXISTS economy_pkey CASCADE;
+
+
+1. CREATE INDEX statements:
+
+CREATE INDEX city_name_prefix_index ON city (name varchar_pattern_ops);
+CREATE INDEX country_name_hash_index ON country USING HASH (name);
+CREATE INDEX city_country_code_hash_index ON city USING HASH (country_code);
+
+EXPLAIN SELECT c.name, ct.name, c.population, e.gdp, e.inflation
+FROM city c
+NATURAL JOIN country ct
+NATURAL JOIN economy e
+WHERE c.name LIKE 'B%'
+AND ct.name = 'Turkey';
+
+DROP INDEX city_name_prefix_index;
+DROP INDEX country_name_hash_index;
+DROP INDEX city_country_code_hash_index;
+
+2. Explanation for why I chose each of the indexes:
+
+a) city_name_prefix_index: B-tree index with varchar_pattern_ops for optimizing LIKE 'B%' prefix searches. The special operator class varchar_pattern_ops is specifically designed for pattern matching operations.
+b) country_name_hash_index: Hash index for equality comparison on country.name = 'Turkey'. Hash indexes provide faster lookups for exact matches.
+c) city_country_code_hash_index and economy_country_code_hash_index: Hash indexes for join conditions. These optimize equality-based joins between tables.
+
+3. The output of EXPLAIN for the query after the indexes were added:
+
+Nested Loop  (cost=8.32..20.80 rows=1 width=43)
+  Join Filter: (c.population = (ct.population)::double precision)
+  ->  Hash Join  (cost=8.32..14.71 rows=1 width=33)
+        Hash Cond: ((e.country_code)::text = (c.country_code)::text)
+        ->  Seq Scan on economy e  (cost=0.00..5.46 rows=246 width=19)
+        ->  Hash  (cost=8.30..8.30 rows=1 width=20)
+              ->  Index Scan using city_name_prefix_index on city c  (cost=0.28..8.30 rows=1 width=20)
+                    Index Cond: (((name)::text ~>=~ 'B'::text) AND ((name)::text ~<~ 'C'::text) AND ((name)::text = 'Turkey'::text))
+                    Filter: ((name)::text ~~ 'B%'::text)
+  ->  Seq Scan on country ct  (cost=0.00..6.08 rows=1 width=14)
+        Filter: ((name)::text = 'Turkey'::text)
+
+
+4. Whether the indexes caused a performance increase for the query:
+
+Yes, there was a speed up. The execution plan shows the use of the city_name_prefix_index for efficient pattern matching on city names starting with 'B', which improves performance compared to scanning the entire city table.
+
+

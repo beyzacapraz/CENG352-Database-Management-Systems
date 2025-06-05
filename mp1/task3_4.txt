@@ -1,0 +1,60 @@
+SELECT tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+ORDER BY tablename;
+
+ALTER TABLE city DROP CONSTRAINT IF EXISTS city_pkey CASCADE;
+ALTER TABLE country DROP CONSTRAINT IF EXISTS country_pkey CASCADE;
+ALTER TABLE economy DROP CONSTRAINT IF EXISTS economy_pkey CASCADE;
+
+1. CREATE INDEX statements:
+
+CREATE INDEX city_population_btree_index ON city (population);
+CREATE INDEX economy_inflation_hash_index ON economy USING HASH (inflation);
+CREATE INDEX economy_country_code_hash_index ON economy USING HASH (country_code);
+CREATE INDEX city_country_code_hash_index ON city USING HASH (country_code);
+
+EXPLAIN SELECT c.name, ct.name, c.population, e.gdp, e.inflation
+FROM city c
+NATURAL JOIN country ct
+NATURAL JOIN economy e
+WHERE c.population > 5000000
+AND inflation = 4
+ORDER BY population;
+
+DROP INDEX city_population_btree_index;
+DROP INDEX economy_inflation_hash_index;
+DROP INDEX economy_country_code_hash_index;
+DROP INDEX city_country_code_hash_index;
+
+2. Explanation for why I chose each of the indexes:
+
+a) city_population_btree_index: B-tree index for both range filtering (population > 5000000) and sorting. B-tree is necessary since hash indexes don't support range queries or ordering.
+b) economy_inflation_hash_index: Hash index for the equality comparison inflation = 4. Hash indexes provide faster lookups for exact matches.
+c) economy_country_code_hash_index and city_country_code_hash_index: Hash indexes for join conditions. These optimize equality-based joins between tables.
+
+3. The output of EXPLAIN for the query after the indexes were added:
+
+Sort  (cost=40.67..40.67 rows=1 width=43)
+  Sort Key: c.population
+  ->  Nested Loop  (cost=13.89..40.66 rows=1 width=43)
+        ->  Hash Join  (cost=13.89..40.15 rows=1 width=30)
+              Hash Cond: (((c.name)::text = (ct.name)::text) AND (c.population = (ct.population)::double precision))
+              ->  Bitmap Heap Scan on city c  (cost=4.74..30.47 rows=59 width=20)
+                    Recheck Cond: (population > '5000000'::double precision)
+                    ->  Bitmap Index Scan on city_population_btree_index  (cost=0.00..4.72 rows=59 width=0)
+                          Index Cond: (population > '5000000'::double precision)
+              ->  Hash  (cost=5.46..5.46 rows=246 width=14)
+                    ->  Seq Scan on country ct  (cost=0.00..5.46 rows=246 width=14)
+        ->  Index Scan using economy_country_code_hash_index on economy e  (cost=0.00..0.49 rows=1 width=19)
+              Index Cond: ((country_code)::text = (c.country_code)::text)
+              Filter: (inflation = '4'::double precision)
+
+
+4. Whether the indexes caused a performance increase for the query:
+
+Yes, there was a speed up. The execution plan shows effective use of indexes:
+city_population_btree_index for filtering cities with population > 5000000.
+economy_country_code_hash_index for efficient joining with the economy table.
+The sort operation for ORDER BY population benefits from the filtered result set.
+The economy_inflation_hash_index isn't used directly; instead, inflation filtering is applied after the join, which is more efficient for this query pattern.

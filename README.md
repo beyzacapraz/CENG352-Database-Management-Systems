@@ -1,11 +1,11 @@
 # CENG352-Database-Management-Systems
-Review of relational model of data, relational algebra, and SQL. Semi-structured data models. Relational database design theory. Query evaluation and optimization. Performance tuning. Transaction management, concurrency control and crash recovery. Client-server architectures. NoSQL databases. 
-Here's a comprehensive README.md file for your **CENG 352 - Project 1** submission:
+Review of relational model of data, relational algebra, and SQL. Semi-structured data models. Relational database design theory. Query evaluation and optimization. Performance tuning. Transaction management, concurrency control and crash recovery. Client-server architectures. NoSQL databases.
 
 ---
 
 # 📊 CENG 352: Database Management Systems – Project 1
 
+The details and the requirements of the project can be found in the mp1.pdf
 
 ## 📁 Project Overview
 
